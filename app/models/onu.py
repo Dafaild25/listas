@@ -7,6 +7,10 @@ class PersonaONU(Base):
     id = Column(Integer, primary_key=True)
     nombre = Column(String)
     tipo = Column(String)
+    
+    fuente_id = Column(Integer, ForeignKey('fuente_lista.id'))
+    fuente = relationship("FuenteLista")
+
     alias = relationship("AliasONU", back_populates="persona", cascade="all, delete-orphan")
     documentos = relationship("DocumentoONU", back_populates="persona", cascade="all, delete-orphan")
     direcciones = relationship("DireccionONU", back_populates="persona", cascade="all, delete-orphan")

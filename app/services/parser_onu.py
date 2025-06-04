@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from app.database import SessionLocal, engine
 from app.models import onu
+from app.models.fuente import FuenteLista
 
 onu.Base.metadata.create_all(bind=engine)
 
@@ -11,17 +12,28 @@ def get_text_any(node, possible_tags):
             return val
     return ''
 
-def procesar(xml_str: str, campos: list[str]):
+def procesar(xml_str: str, campos: list[str], nombre_fuente: str):
     tree = ET.ElementTree(ET.fromstring(xml_str))
     root = tree.getroot()
     session = SessionLocal()
 
-    # 🔄 Limpiar tablas antes de insertar
-    session.query(onu.NacionalidadONU).delete()
-    session.query(onu.DireccionONU).delete()
-    session.query(onu.DocumentoONU).delete()
-    session.query(onu.AliasONU).delete()
-    session.query(onu.PersonaONU).delete()
+    # 🔍 Buscar o crear la fuente
+    fuente = session.query(FuenteLista).filter_by(nombre=nombre_fuente).first()
+    if not fuente:
+        fuente = FuenteLista(nombre=nombre_fuente)
+        session.add(fuente)
+        session.commit()
+        session.refresh(fuente)  # 🔁 Para asegurar que .id esté disponible
+    fuente_id = fuente.id
+
+    # 🔄 Eliminar registros relacionados a esta fuente
+    personas = session.query(onu.PersonaONU).filter_by(fuente_id=fuente_id).all()
+    for persona in personas:
+        session.query(onu.AliasONU).filter_by(persona_id=persona.id).delete()
+        session.query(onu.DocumentoONU).filter_by(persona_id=persona.id).delete()
+        session.query(onu.DireccionONU).filter_by(persona_id=persona.id).delete()
+        session.query(onu.NacionalidadONU).filter_by(persona_id=persona.id).delete()
+        session.delete(persona)
     session.commit()
 
     count = 0
@@ -33,7 +45,7 @@ def procesar(xml_str: str, campos: list[str]):
             get_text_any(persona, ['THIRD_NAME', 'TERCER_NOMBRE'])
         ]).strip()
 
-        registro = onu.PersonaONU(nombre=nombre, tipo='Individual')
+        registro = onu.PersonaONU(nombre=nombre, tipo='Individual', fuente_id=fuente_id)
         session.add(registro)
         session.flush()
 
@@ -80,4 +92,4 @@ def procesar(xml_str: str, campos: list[str]):
         count += 1
 
     session.commit()
-    return f"{count} registros guardados en persona_onu"
+    return f"{count} registros guardados para fuente '{nombre_fuente}'"

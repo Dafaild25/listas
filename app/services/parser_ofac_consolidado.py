@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from app.database import SessionLocal, engine
 from app.models import ofac_consolidado
+from app.models.fuente import FuenteLista
 
 ofac_consolidado.Base.metadata.create_all(bind=engine)
 
@@ -11,19 +12,30 @@ def get_text_any(node, possible_tags, ns):
             return val.strip()
     return ''
 
-def procesar(xml_str: str, campos: list[str]):
+def procesar(xml_str: str, campos: list[str], nombre_fuente: str):
     tree = ET.ElementTree(ET.fromstring(xml_str))
     root = tree.getroot()
     ns = {'ofac': 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML'}
 
     session = SessionLocal()
 
-    # 🔄 Limpiar tablas antes de insertar
-    session.query(ofac_consolidado.NacionalidadConsolidado).delete()
-    session.query(ofac_consolidado.DireccionConsolidado).delete()
-    session.query(ofac_consolidado.DocumentoConsolidado).delete()
-    session.query(ofac_consolidado.AliasConsolidado).delete()
-    session.query(ofac_consolidado.PersonaConsolidado).delete()
+    # 🔍 Buscar o crear la fuente
+    fuente = session.query(FuenteLista).filter_by(nombre=nombre_fuente).first()
+    if not fuente:
+        fuente = FuenteLista(nombre=nombre_fuente)
+        session.add(fuente)
+        session.commit()
+        session.refresh(fuente)
+    fuente_id = fuente.id
+
+    # 🔄 Eliminar solo registros asociados a esta fuente
+    personas = session.query(ofac_consolidado.PersonaConsolidado).filter_by(fuente_id=fuente_id).all()
+    for persona in personas:
+        session.query(ofac_consolidado.NacionalidadConsolidado).filter_by(persona_id=persona.id).delete()
+        session.query(ofac_consolidado.DireccionConsolidado).filter_by(persona_id=persona.id).delete()
+        session.query(ofac_consolidado.DocumentoConsolidado).filter_by(persona_id=persona.id).delete()
+        session.query(ofac_consolidado.AliasConsolidado).filter_by(persona_id=persona.id).delete()
+        session.delete(persona)
     session.commit()
 
     count = 0
@@ -33,7 +45,7 @@ def procesar(xml_str: str, campos: list[str]):
         nombre = f"{first} {last}".strip() if first else last
         tipo = get_text_any(entry, ['ofac:sdnType', 'ofac:tipo'], ns)
 
-        persona = ofac_consolidado.PersonaConsolidado(nombre=nombre, tipo=tipo)
+        persona = ofac_consolidado.PersonaConsolidado(nombre=nombre, tipo=tipo, fuente_id=fuente_id)
         session.add(persona)
         session.flush()
 
@@ -79,4 +91,4 @@ def procesar(xml_str: str, campos: list[str]):
         count += 1
 
     session.commit()
-    return f"{count} registros guardados en persona_ofac_consolidado"
+    return f"{count} registros guardados para fuente '{nombre_fuente}'"

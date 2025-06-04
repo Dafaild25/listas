@@ -8,6 +8,10 @@ class PersonaConsolidado(Base):
     nombre = Column(String)
     tipo = Column(String)
 
+    #aqui añadi un campo mas
+    fuente_id = Column(Integer, ForeignKey('fuente_lista.id'))
+    fuente = relationship("FuenteLista")
+
     alias = relationship("AliasConsolidado", back_populates="persona", cascade="all, delete-orphan")
     documentos = relationship("DocumentoConsolidado", back_populates="persona", cascade="all, delete-orphan")
     direcciones = relationship("DireccionConsolidado", back_populates="persona", cascade="all, delete-orphan")

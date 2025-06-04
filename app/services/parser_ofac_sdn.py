@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from app.database import SessionLocal, engine
 from app.models import ofac_sdn
+from app.models.fuente import FuenteLista
 
 ofac_sdn.Base.metadata.create_all(bind=engine)
 
@@ -11,19 +12,30 @@ def get_text_any(node, possible_tags, ns):
             return val.strip()
     return ''
 
-def procesar(xml_str: str, campos: list[str]):
+def procesar(xml_str: str, campos: list[str], nombre_fuente: str):
     tree = ET.ElementTree(ET.fromstring(xml_str))
     root = tree.getroot()
     ns = {'ofac': 'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML'}
 
     session = SessionLocal()
 
-    # 🔄 Limpiar tablas antes de insertar
-    session.query(ofac_sdn.NacionalidadSDN).delete()
-    session.query(ofac_sdn.DireccionSDN).delete()
-    session.query(ofac_sdn.DocumentoSDN).delete()
-    session.query(ofac_sdn.AliasSDN).delete()
-    session.query(ofac_sdn.PersonaSDN).delete()
+    # 🔍 Buscar o crear la fuente
+    fuente = session.query(FuenteLista).filter_by(nombre=nombre_fuente).first()
+    if not fuente:
+        fuente = FuenteLista(nombre=nombre_fuente)
+        session.add(fuente)
+        session.commit()
+        session.refresh(fuente)
+    fuente_id = fuente.id
+
+    # 🔄 Eliminar solo registros asociados a esta fuente
+    personas = session.query(ofac_sdn.PersonaSDN).filter_by(fuente_id=fuente_id).all()
+    for persona in personas:
+        session.query(ofac_sdn.NacionalidadSDN).filter_by(persona_id=persona.id).delete()
+        session.query(ofac_sdn.DireccionSDN).filter_by(persona_id=persona.id).delete()
+        session.query(ofac_sdn.DocumentoSDN).filter_by(persona_id=persona.id).delete()
+        session.query(ofac_sdn.AliasSDN).filter_by(persona_id=persona.id).delete()
+        session.delete(persona)
     session.commit()
 
     count = 0
@@ -32,7 +44,7 @@ def procesar(xml_str: str, campos: list[str]):
         nombre = get_text_any(entry, ['ofac:lastName', 'ofac:apellido'], ns)
         tipo = get_text_any(entry, ['ofac:sdnType', 'ofac:tipo'], ns)
 
-        persona = ofac_sdn.PersonaSDN(nombre=nombre, tipo=tipo)
+        persona = ofac_sdn.PersonaSDN(nombre=nombre, tipo=tipo, fuente_id=fuente_id)
         session.add(persona)
         session.flush()
 
@@ -59,7 +71,7 @@ def procesar(xml_str: str, campos: list[str]):
                 ciudad = addr.findtext('ofac:city', '', namespaces=ns).strip()
                 provincia = addr.findtext('ofac:stateOrProvince', '', namespaces=ns).strip()
                 pais = addr.findtext('ofac:country', '', namespaces=ns).strip()
-                
+
                 if calle or ciudad or provincia or pais:
                     session.add(ofac_sdn.DireccionSDN(
                         calle=calle, ciudad=ciudad, provincia=provincia, pais=pais,
@@ -76,4 +88,4 @@ def procesar(xml_str: str, campos: list[str]):
         count += 1
 
     session.commit()
-    return f"{count} registros guardados en persona_ofac_sdn"
+    return f"{count} registros guardados para fuente '{nombre_fuente}'"

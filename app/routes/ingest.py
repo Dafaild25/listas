@@ -9,6 +9,7 @@ router = APIRouter()
 class XMLIngest(BaseModel):
     url: str
     campos: list[str]
+    nombre_fuente: str  # ✅ campo nuevo
 
 @router.post("/procesar")
 async def procesar_xml(data: XMLIngest):
@@ -22,5 +23,6 @@ async def procesar_xml(data: XMLIngest):
     if not parser:
         return {"error": "Fuente no reconocida"}
 
-    resultado = parser(xml_content, data.campos)
+    # ✅ se pasa el nombre de la fuente al parser
+    resultado = parser(xml_content, data.campos, data.nombre_fuente)
     return {"tipo": tipo_fuente, "resultado": resultado}
