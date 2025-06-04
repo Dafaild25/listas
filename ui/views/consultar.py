@@ -2,10 +2,9 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from views.detalle import mostrar_detalle
-
 import os
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "sanciones.db"))
 
+DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "sanciones.db"))
 
 TABLAS = {
     "ONU": "persona_onu",
@@ -26,23 +25,21 @@ def mostrar():
         st.session_state.resultado = None
         st.session_state.seleccionado = None
         conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
 
-        base = f"SELECT p.id, p.nombre FROM {TABLAS[fuente]} p"
-        if fuente != "ONU":
-            base = f"SELECT p.id, p.nombre, p.tipo FROM {TABLAS[fuente]} p"
+        tabla = TABLAS[fuente]
+        base = f"SELECT p.id, p.nombre, p.tipo FROM {tabla} p" if fuente != "ONU" else f"SELECT p.id, p.nombre FROM {tabla} p"
 
         filtros = []
         joins = []
 
         if alias:
-            alias_tabla = f"alias_{TABLAS[fuente].replace('persona_', '')}"
+            alias_tabla = f"alias_{tabla.replace('persona_', '')}"
             joins.append(f"JOIN {alias_tabla} a ON a.persona_id = p.id")
-            filtros.append(f"a.nombre LIKE ?")
+            filtros.append("a.nombre LIKE ?")
 
         if pais:
-            dir_tabla = f"direccion_{TABLAS[fuente].replace('persona_', '')}"
-            nac_tabla = f"nacionalidad_{TABLAS[fuente].replace('persona_', '')}"
+            dir_tabla = f"direccion_{tabla.replace('persona_', '')}"
+            nac_tabla = f"nacionalidad_{tabla.replace('persona_', '')}"
             joins.append(f"LEFT JOIN {dir_tabla} d ON d.persona_id = p.id")
             joins.append(f"LEFT JOIN {nac_tabla} n ON n.persona_id = p.id")
             filtros.append("(d.pais LIKE ? OR n.nacionalidad LIKE ?)")
@@ -83,7 +80,6 @@ def mostrar():
         if not df.empty:
             st.markdown("### Resultados:")
 
-            # Paginación
             resultados_por_pagina = 10
             total_paginas = (len(df) - 1) // resultados_por_pagina + 1
 
@@ -101,7 +97,7 @@ def mostrar():
                     if 'tipo' in row:
                         st.caption(f"Tipo: {row['tipo']}")
                 with col2:
-                    if st.button("Ver más", key=f"detalle_btn_{idx}"):
+                    if st.button("Ver más", key=f"detalle_btn_{row['id']}"):
                         st.session_state.seleccionado = row['id']
                         st.session_state.fuente_actual = fuente
 

@@ -10,3 +10,7 @@ uvicorn app.main:app --reload
 
 comando para correr el ui
 streamlit run ui/main.py
+
+
+para crear una  busqueda con  rapidFuzz
+pip install rapidfuzz
