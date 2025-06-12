@@ -1,6 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+# Definir Base antes de la importación de otros modelos
+Base = declarative_base()
+
 SQLALCHEMY_DATABASE_URL = "sqlite:///./sanciones.db"
 
 engine = create_engine(
@@ -9,4 +12,4 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+
